@@ -95,6 +95,7 @@ func (r *ImageUpdaterReconciler) RunImageUpdater(ctx context.Context, cr *iuapi.
 				GitCommitSigningMethod: r.Config.GitCommitSigningMethod,
 				GitCommitSignOff:       r.Config.GitCommitSignOff,
 				GitCommitMethod:        r.Config.GitCommitMethod,
+				GitPushRetry:           r.Config.GitPushRetry,
 				DisableKubeEvents:      r.Config.DisableKubeEvents,
 				GitCreds:               r.Config.GitCreds,
 			}

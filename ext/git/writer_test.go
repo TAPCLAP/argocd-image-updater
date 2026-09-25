@@ -322,6 +322,47 @@ func TestPush(t *testing.T) {
 	})
 }
 
+func TestPullRebase(t *testing.T) {
+	ctx := context.Background()
+	workDir, bareDir, client := func() (string, string, Client) {
+		workDir := t.TempDir()
+		bareDir := t.TempDir()
+		require.NoError(t, runCmd(workDir, "git", "init", "-b", "master"))
+		require.NoError(t, runCmd(workDir, "git", "config", "user.email", "test@example.com"))
+		require.NoError(t, runCmd(workDir, "git", "config", "user.name", "Test User"))
+		require.NoError(t, os.WriteFile(filepath.Join(workDir, "a.txt"), []byte("a\n"), 0o600))
+		require.NoError(t, runCmd(workDir, "git", "add", "a.txt"))
+		require.NoError(t, runCmd(workDir, "git", "commit", "-m", "initial"))
+		require.NoError(t, runCmd(bareDir, "git", "init", "--bare"))
+		require.NoError(t, runCmd(workDir, "git", "remote", "add", "origin", bareDir))
+		require.NoError(t, runCmd(workDir, "git", "push", "origin", "master"))
+		client, err := NewClientExt(fmt.Sprintf("file://%s", bareDir), workDir, NopCreds{}, false, false, "")
+		require.NoError(t, err)
+		return workDir, bareDir, client
+	}()
+
+	other := t.TempDir()
+	require.NoError(t, runCmd(other, "git", "clone", bareDir, "."))
+	require.NoError(t, runCmd(other, "git", "config", "user.email", "test@example.com"))
+	require.NoError(t, runCmd(other, "git", "config", "user.name", "Test User"))
+	require.NoError(t, os.WriteFile(filepath.Join(other, "remote.txt"), []byte("remote\n"), 0o600))
+	require.NoError(t, runCmd(other, "git", "add", "remote.txt"))
+	require.NoError(t, runCmd(other, "git", "commit", "-m", "remote change"))
+	require.NoError(t, runCmd(other, "git", "push", "origin", "master"))
+
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "local.txt"), []byte("local\n"), 0o600))
+	require.NoError(t, runCmd(workDir, "git", "add", "local.txt"))
+	require.NoError(t, runCmd(workDir, "git", "commit", "-m", "local change"))
+
+	require.Error(t, client.Push(ctx, "origin", "master", false))
+	require.NoError(t, client.Pull(ctx, "origin", "master"))
+	require.NoError(t, client.Push(ctx, "origin", "master", false))
+
+	msg, err := runCmdOut(bareDir, "git", "log", "-1", "--format=%s")
+	require.NoError(t, err)
+	assert.Equal(t, "local change", msg)
+}
+
 // ---------------------------------------------------------------------------
 // SymRefToBranch
 // ---------------------------------------------------------------------------

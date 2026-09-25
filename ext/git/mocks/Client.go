@@ -384,6 +384,24 @@ func (_m *Client) Push(ctx context.Context, remote string, branch string, force 
 	return r0
 }
 
+// Pull provides a mock function with given fields: remote, branch
+func (_m *Client) Pull(ctx context.Context, remote string, branch string) error {
+	ret := _m.Called(remote, branch)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Pull")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string, string) error); ok {
+		r0 = rf(remote, branch)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // RevisionMetadata provides a mock function with given fields: revision
 func (_m *Client) RevisionMetadata(ctx context.Context, revision string) (*git.RevisionMetadata, error) {
 	ret := _m.Called(revision)

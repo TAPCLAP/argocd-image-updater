@@ -62,6 +62,7 @@ type ImageUpdaterConfig struct {
 	GitCommitSigningMethod string
 	GitCommitSignOff       bool
 	GitCommitMethod        string
+	GitPushRetry           argocd.GitPushRetry
 	DisableKubeEvents      bool
 	GitCreds               git.CredsStore
 	EnableWebhook          bool
