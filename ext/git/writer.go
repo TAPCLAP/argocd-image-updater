@@ -103,6 +103,20 @@ func (m *nativeGitClient) Push(ctx context.Context, remote string, branch string
 	return nil
 }
 
+// Pull rebases the currently checked out branch onto the given remote branch.
+// If the rebase stops (for example on a conflict), it is aborted so the
+// working tree is left as it was before the pull.
+func (m *nativeGitClient) Pull(ctx context.Context, remote string, branch string) error {
+	err := m.runCredentialedCmd(ctx, "pull", "--rebase", remote, branch)
+	if err != nil {
+		if _, abortErr := m.runCmd(ctx, "rebase", "--abort"); abortErr != nil {
+			log.LoggerFromContext(ctx).Debugf("git rebase --abort after failed pull: %v", abortErr)
+		}
+		return fmt.Errorf("could not pull --rebase %s %s: %v", remote, branch, err)
+	}
+	return nil
+}
+
 // Add adds a path spec to the repository
 func (m *nativeGitClient) Add(ctx context.Context, path string) error {
 	return m.runCredentialedCmd(ctx, "add", path)

@@ -42,6 +42,7 @@ type UpdateConfiguration struct {
 	GitCommitSigningMethod string
 	GitCommitSignOff       bool
 	GitCommitMethod        string
+	GitPushRetry           GitPushRetry
 	DisableKubeEvents      bool
 	IgnorePlatforms        bool
 	GitCreds               git.CredsStore
@@ -104,6 +105,7 @@ type WriteBackConfig struct {
 	GitCommitSigningMethod string
 	GitCommitSignOff       bool
 	GitCommitMethod        string
+	GitPushRetry           GitPushRetry
 	KustomizeBase          string
 	Target                 string
 	GitRepo                string

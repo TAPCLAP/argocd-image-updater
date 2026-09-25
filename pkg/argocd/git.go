@@ -340,7 +340,7 @@ func commitChangesGit(ctx context.Context, applicationImages *ApplicationImages,
 	if err != nil {
 		return false, err
 	}
-	err = gitC.Push(ctx, "origin", pushBranch, pushBranch != checkOutBranch)
+	err = pushChanges(ctx, gitC, "origin", pushBranch, pushBranch != checkOutBranch, wbc.GitPushRetry)
 	if err != nil {
 		return false, err
 	}
