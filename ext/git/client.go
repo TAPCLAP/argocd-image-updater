@@ -91,6 +91,8 @@ type Client interface {
 	Commit(ctx context.Context, pathSpec string, opts *CommitOptions) error
 	Branch(ctx context.Context, sourceBranch string, targetBranch string) error
 	Push(ctx context.Context, remote string, branch string, force bool) error
+	// Pull rebases the current branch onto the remote branch (`git pull --rebase`).
+	Pull(ctx context.Context, remote string, branch string) error
 	Add(ctx context.Context, path string) error
 	SymRefToBranch(ctx context.Context, symRef string) (string, error)
 	Config(ctx context.Context, username string, email string) error

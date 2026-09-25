@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/bombsimon/logrusr/v2"
 	"github.com/sirupsen/logrus"
@@ -52,6 +53,9 @@ Supported registries:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !argocd.IsValidGitCommitMethod(cfg.GitCommitMethod) {
 				return fmt.Errorf("invalid value %q for --git-commit-method: must be 'git' or 'api'", cfg.GitCommitMethod)
+			}
+			if err := argocd.ValidateGitPushRetry(cfg.GitPushRetry); err != nil {
+				return err
 			}
 
 			if err := log.SetLogLevel(cfg.LogLevel); err != nil {
@@ -97,6 +101,9 @@ Supported registries:
 	webhookCmd.Flags().BoolVar(&cfg.GitCommitSignOff, "git-commit-sign-off", env.GetBoolVal("GIT_COMMIT_SIGN_OFF", false), "Whether to sign-off git commits")
 	webhookCmd.Flags().StringVar(&commitMessagePath, "git-commit-message-path", common.DefaultCommitTemplatePath, "Path to a template to use for Git commit messages")
 	webhookCmd.Flags().StringVar(&cfg.GitCommitMethod, "git-commit-method", env.GetStringVal("GIT_COMMIT_METHOD", "git"), "Method used to create write-back commits ('git' or 'api'; 'api' commits via the GitHub API and requires GitHub App credentials)")
+	webhookCmd.Flags().BoolVar(&cfg.GitPushRetry.Enabled, "git-push-retry", env.GetBoolVal("GIT_PUSH_RETRY", false), "Retry a non-fast-forward git push after 'git pull --rebase'")
+	webhookCmd.Flags().IntVar(&cfg.GitPushRetry.Attempts, "git-push-retry-attempts", env.ParseNumFromEnv("GIT_PUSH_RETRY_ATTEMPTS", 3, 1, 100), "Total git push attempts when --git-push-retry is set, including the first push (must be >= 1)")
+	webhookCmd.Flags().DurationVar(&cfg.GitPushRetry.Interval, "git-push-retry-interval", env.GetDurationVal("GIT_PUSH_RETRY_INTERVAL", 10*time.Second), "Base delay between git push retries. Each wait is jittered to between half of this value and the value itself")
 	webhookCmd.Flags().BoolVar(&cfg.DisableKubeEvents, "disable-kube-events", env.GetBoolVal("IMAGE_UPDATER_KUBE_EVENTS", false), "Disable kubernetes events")
 
 	webhookCmd.Flags().BoolVar(&webhookCfg.RequireSecret, "webhook-require-secret", env.GetBoolVal("WEBHOOK_REQUIRE_SECRET", true), "Require webhook secrets by default")

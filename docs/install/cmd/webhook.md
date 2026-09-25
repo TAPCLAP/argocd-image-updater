@@ -111,6 +111,24 @@ Username to use for Git commits (default "argocd-image-updater")
 
 Can also be set using the *GIT_COMMIT_USER* environment variable.
 
+**--git-push-retry**
+
+Retry a git push that was rejected because the remote branch moved (`non-fast-forward`, the usual `'git pull' before pushing again` error). Before each retry the updater runs `git pull --rebase` and then pushes again without force. The wait before a retry is jittered to a random duration between half of `--git-push-retry-interval` and the full interval. The standalone webhook command uses the same write-back path as interval reconciliation.
+
+Can also be set using the *GIT_PUSH_RETRY* environment variable.
+
+**--git-push-retry-attempts *count***
+
+Total number of git push attempts when `--git-push-retry` is enabled, including the first push (default `3`, must be >= 1).
+
+Can also be set using the *GIT_PUSH_RETRY_ATTEMPTS* environment variable.
+
+**--git-push-retry-interval *duration***
+
+Base delay between git push retries (default `2s`). Each wait is a random value in `[interval/2, interval)`.
+
+Can also be set using the *GIT_PUSH_RETRY_INTERVAL* environment variable.
+
 **--harbor-webhook-secret *secret***
 
 Secret for validating Harbor webhooks
