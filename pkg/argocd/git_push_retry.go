@@ -88,7 +88,13 @@ func isRetryablePushError(err error) bool {
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "before pushing again") ||
 		strings.Contains(msg, "non-fast-forward") ||
-		strings.Contains(msg, "tip of your current branch is behind")
+		strings.Contains(msg, "tip of your current branch is behind") ||
+		strings.Contains(msg, "protected branch update failed for") ||
+		strings.Contains(msg, "protected branch hook declined") ||
+		strings.Contains(msg, "changes must be made through a pull request") ||
+		strings.Contains(msg, "updates were rejected because the remote contains work that you do not") || 
+		strings.Contains(msg, "fetch first") ||
+		strings.Contains(msg, "cannot lock ref")
 }
 
 // retryDelay returns a wait in [interval/2, interval). A non-positive interval waits nothing.
