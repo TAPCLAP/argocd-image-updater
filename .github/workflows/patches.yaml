@@ -1,0 +1,167 @@
+name: Patches
+
+on:
+  push:
+    branches:
+      - patches
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Run unit tests
+        env:
+          GNUPG_DISABLED: true
+        run: make test
+
+  image:
+    name: Image (${{ matrix.arch }})
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Build and push image
+        uses: tapclap/build-images-action@main
+        with:
+          registry: ghcr.io
+          registry-user: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+          tag: "{{ ref }}-${{ matrix.arch }}"
+          tag-on-git-tag: "{{ ref }}-${{ matrix.arch }}"
+          operation: build-and-push
+          build-opts: |
+            - name: argocd-image-updater
+              file: ./Dockerfile
+              repo-image-name: true
+
+  release:
+    name: Manifest and release
+    needs: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Fetch upstream tags
+        run: |
+          git fetch --no-tags https://github.com/argoproj-labs/argocd-image-updater.git \
+            '+refs/tags/*:refs/tags/upstream/*'
+
+      - name: Describe upstream base and patches
+        id: fork
+        run: |
+          set -euo pipefail
+          base=""
+          best=-1
+          while read -r ref; do
+            if git merge-base --is-ancestor "$ref" HEAD; then
+              n=$(git rev-list --count "$ref"..HEAD)
+              if [ "$best" -lt 0 ] || [ "$n" -lt "$best" ]; then
+                best=$n
+                base=${ref#refs/tags/upstream/}
+              fi
+            fi
+          done < <(git for-each-ref --format='%(refname)' refs/tags/upstream)
+
+          if [ -z "$base" ]; then
+            echo "No upstream tag is an ancestor of ${GITHUB_SHA}" >&2
+            exit 1
+          fi
+
+          {
+            echo "base=$base"
+            echo "patches<<EOF"
+            git log --format='- %h %s' "refs/tags/upstream/$base"..HEAD
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Publish multi-arch manifest
+        id: manifest
+        run: |
+          set -euo pipefail
+          image="ghcr.io/$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          tag="${GITHUB_REF_NAME}"
+          docker buildx imagetools create \
+            --tag "${image}:${tag}" \
+            "${image}:${tag}-amd64" \
+            "${image}:${tag}-arm64"
+          echo "image=${image}:${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ${{ steps.manifest.outputs.image }}
+          UPSTREAM: ${{ steps.fork.outputs.base }}
+          PATCHES: ${{ steps.fork.outputs.patches }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          notes=$(mktemp)
+          {
+            echo "## Образы"
+            echo
+            echo "- \`${IMAGE}\` (linux/amd64, linux/arm64)"
+            echo
+            echo "## Upstream"
+            echo
+            echo "Собрано поверх тега [\`$UPSTREAM\`](https://github.com/argoproj-labs/argocd-image-updater/releases/tag/$UPSTREAM)."
+            echo
+            echo "## Патчи"
+            echo
+            if [ -n "$PATCHES" ]; then
+              printf '%s\n' "$PATCHES"
+            else
+              echo "Нет коммитов поверх upstream."
+            fi
+          } > "$notes"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --title "$tag" --notes-file "$notes"
+          else
+            gh release create "$tag" --title "$tag" --notes-file "$notes"
+          fi
