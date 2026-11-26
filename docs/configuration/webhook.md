@@ -31,6 +31,20 @@ Using webhooks can help reduce some of the stress that is put on the
 container registries and where you are running Image Updater by reducing the 
 need to poll.
 
+## How Matching Works
+
+A webhook event carries a registry URL and repository name. Image Updater
+lists every `ImageUpdater` CR and, for each `ApplicationRef`, checks whether
+any configured image matches that registry/repository.
+
+- If **at least one** image in the `ApplicationRef` matches, Image Updater
+  runs an update check for **all** images in that same `ApplicationRef` (not
+  only the matched repository). Updates for one Argo CD Application are still
+  written back in a single commit/push when several images change.
+- If **no** image in the `ApplicationRef` matches, that application is skipped.
+- Other `ApplicationRef` entries in the same CR are only processed when they
+  have their own matching image.
+
 ## Enabling the Webhook Server
 
 There are two ways to enable the webhook server. You can either use it with 

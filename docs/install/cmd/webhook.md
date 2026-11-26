@@ -6,7 +6,7 @@
 
 ### Description
 
-Starts a server that listens for webhook events from container registries. When an event is received, it can trigger an image update check for the affected images.
+Starts a server that listens for webhook events from container registries. When an event is received, it triggers an image update check for every image in each `ApplicationRef` that contains a matching registry/repository (see [How Matching Works](../../configuration/webhook.md#how-matching-works)).
 
 Supported Registries:
 

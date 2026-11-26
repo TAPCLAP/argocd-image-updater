@@ -757,11 +757,30 @@ func newImageFromImagesVerification(kubeClient *kube.ImageUpdaterKubernetesClien
 	return img, nil
 }
 
+// imageMatchesWebhook reports whether an image's registry and repository match
+// a webhook event. An empty image registry matches any event registry; the
+// repository must always match.
+func imageMatchesWebhook(registryURL, imageName string, event *WebhookEvent) bool {
+	if event == nil {
+		return false
+	}
+	if registryURL != "" && registryURL != event.RegistryURL {
+		return false
+	}
+	return imageName == event.Repository
+}
+
 // parseImageList parses a list of ImageConfig objects from the ImageUpdater CR
 // into a ImageList, which is used internally for image management.
+//
+// When webhookEvent is set, the list is scoped to an ApplicationRef: if any
+// image matches the event's registry/repository, every successfully parsed
+// image in the list is returned so the whole ApplicationRef is rechecked.
+// If none match, an empty list is returned.
 func parseImageList(ctx context.Context, kubeClient *kube.ImageUpdaterKubernetesClient, appNamespace string, images []iuapi.ImageConfig, appSettings *iuapi.CommonUpdateSettings, appImagesVerification *iuapi.ImagesVerification, webhookEvent *WebhookEvent) *ImageList {
 	log := log.LoggerFromContext(ctx)
 	results := make(ImageList, 0)
+	matchedAlias := ""
 	for _, im := range images {
 		// For each image, calculate its final settings by layering its specific
 		// settings on top of the application-level settings.
@@ -793,25 +812,16 @@ func parseImageList(ctx context.Context, kubeClient *kube.ImageUpdaterKubernetes
 			continue
 		}
 
-		// Check if any of the images match the webhook event
 		if webhookEvent != nil {
 			log.Debugf("Checking webhook match for image `%s`: event=(%s/%s), image=(%s/%s)",
 				im.Alias, webhookEvent.RegistryURL, webhookEvent.Repository,
 				img.ContainerImage.RegistryURL, img.ContainerImage.ImageName)
-
-			// Skip if registry doesn't match
-			if img.ContainerImage.RegistryURL != "" && img.ContainerImage.RegistryURL != webhookEvent.RegistryURL {
-				log.Debugf("Registry mismatch for image `%s`: %s != %s", im.Alias, img.ContainerImage.RegistryURL, webhookEvent.RegistryURL)
-				continue
+			if imageMatchesWebhook(img.ContainerImage.RegistryURL, img.ContainerImage.ImageName, webhookEvent) {
+				if matchedAlias == "" {
+					matchedAlias = im.Alias
+				}
+				log.Debugf("Image `%s` matches webhook event=(%s/%s)", im.Alias, webhookEvent.RegistryURL, webhookEvent.Repository)
 			}
-
-			// Check if repository matches
-			if img.ContainerImage.ImageName != webhookEvent.Repository {
-				log.Debugf("Repository mismatch for image `%s`: %s != %s", im.Alias, img.ContainerImage.ImageName, webhookEvent.Repository)
-				continue
-			}
-
-			log.Infof("Image `%s` matches webhook event=(%s/%s)", im.Alias, webhookEvent.RegistryURL, webhookEvent.Repository)
 		}
 
 		if im.ManifestTarget != nil && im.ManifestTarget.Kustomize != nil && im.ManifestTarget.Kustomize.Name != nil {
@@ -820,6 +830,16 @@ func parseImageList(ctx context.Context, kubeClient *kube.ImageUpdaterKubernetes
 			}
 		}
 		results = append(results, img)
+	}
+
+	if webhookEvent != nil {
+		if matchedAlias == "" {
+			log.Debugf("No images matched webhook event=(%s/%s)", webhookEvent.RegistryURL, webhookEvent.Repository)
+			empty := make(ImageList, 0)
+			return &empty
+		}
+		log.Infof("Webhook event=(%s/%s) matched image `%s`; checking all %d image(s) in ApplicationRef",
+			webhookEvent.RegistryURL, webhookEvent.Repository, matchedAlias, len(results))
 	}
 
 	return &results

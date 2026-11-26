@@ -285,7 +285,10 @@ func (list ImageList) ToContainerImageList() image.ContainerImageList {
 	return cil
 }
 
-// WebhookEvent represents a generic webhook payload
+// WebhookEvent represents a generic webhook payload.
+// Matching is by RegistryURL and Repository. When any image in an
+// ApplicationRef matches, every image in that ApplicationRef is rechecked
+// (not only the matched repository, and not the whole ImageUpdater CR).
 type WebhookEvent struct {
 	// RegistryURL is the URL of the registry that sent the webhook
 	RegistryURL string `json:"registryUrl,omitempty"`

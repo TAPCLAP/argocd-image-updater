@@ -2546,7 +2546,7 @@ func Test_parseImageList(t *testing.T) {
 		assert.ElementsMatch(t, expected, *got)
 	})
 
-	t.Run("Webhook: multiple images only matching kept", func(t *testing.T) {
+	t.Run("Webhook: one match keeps all ApplicationRef images", func(t *testing.T) {
 		images := []api.ImageConfig{
 			{Alias: "web", ImageName: "nginx:1.21.0"},
 			{Alias: "db", ImageName: "redis:6"},
@@ -2555,7 +2555,11 @@ func Test_parseImageList(t *testing.T) {
 		event := &WebhookEvent{RegistryURL: "ghcr.io", Repository: "myorg/app"}
 		got := parseImageList(context.Background(), nil, "", images, nil, nil, event)
 		require.NotNil(t, got)
-		expected := ImageList{newExpectedImageForIuCR("app=ghcr.io/myorg/app:2.0", "")}
+		expected := ImageList{
+			newExpectedImageForIuCR("web=nginx:1.21.0", ""),
+			newExpectedImageForIuCR("db=redis:6", ""),
+			newExpectedImageForIuCR("app=ghcr.io/myorg/app:2.0", ""),
+		}
 		assert.ElementsMatch(t, expected, *got)
 	})
 
@@ -4308,6 +4312,24 @@ func Test_processApplicationForUpdate(t *testing.T) {
 
 		assert.Len(t, appsForUpdate, 0)
 		assert.NotContains(t, appsForUpdate, appNSName)
+	})
+
+	// One matched image in the ApplicationRef should pull in sibling images too.
+	t.Run("Should include all ApplicationRef images when webhook matches one", func(t *testing.T) {
+		ctx := context.Background()
+		appsForUpdate := make(map[string]ApplicationImages)
+		webhook := &WebhookEvent{RegistryURL: "docker.io", Repository: "nginx"}
+		appNSName := "testns/kustomize-app"
+
+		processApplicationForUpdate(ctx, nil, kustomizeApp, appRefWithImages, nil, nil, nil, appNSName, appsForUpdate, webhook)
+
+		require.Contains(t, appsForUpdate, appNSName)
+		assert.Len(t, appsForUpdate[appNSName].Images, 2)
+		aliases := []string{
+			appsForUpdate[appNSName].Images[0].ImageAlias,
+			appsForUpdate[appNSName].Images[1].ImageAlias,
+		}
+		assert.ElementsMatch(t, []string{"web", "db"}, aliases)
 	})
 }
 
